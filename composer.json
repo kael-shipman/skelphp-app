@@ -1,0 +1,21 @@
+{
+  "name" : "skel/app",
+  "description" : "App is a component of the Skel framework designed to coordinate various other components to create a cohesive application. It is meant to be extended by a custom class that the site developer can use to create custom functionality.",
+  "type" : "library",
+  "keywords" : ["application framework", "framework"],
+  "license" : "GPL3",
+  "authors" : [
+    {
+      "name" : "Kael Shipman",
+      "email" : "kael.shipman@gmail.com",
+      "homepage" : "https://colors.kaelshipman.me",
+      "role" : "Developer"
+    }
+  ],
+  "require" : {
+    "php" : ">=5.4"
+  },
+  "require-dev" : {
+    "phpunit/phpunit" : "~5"
+  }
+}
