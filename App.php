@@ -28,6 +28,15 @@ abstract class App implements Interfaces\AccessControlledApp {
 
 
 
+  public function clearRequest() {
+    $request = $this->request;
+    $this->request = null;
+    $this->notifyListeners('ClearRequest', array('context' => $this, 'request' => $request));
+    return $request;
+  }
+
+
+
   public function getConfig() { return $this->config; }
 
   public function __construct(Interfaces\Config $config=null) {
@@ -77,7 +86,12 @@ abstract class App implements Interfaces\AccessControlledApp {
     return new Response(null, 301, array('Location: '.$this->router->getPath('login')));
   }
 
-  public function getResponse() {
+  public function getResponse(Interfaces\Request $request=null) {
+    if (!$this->request) {
+      if (!$request) throw new InvalidArgumentException("No request was provided and no request has been set. You must either set a Request via `setRequest` or provide a request in the method call");
+      else $this->setRequest($request);
+    }
+
     $response = null;
     try {
       $response = $this->router->routeRequest($this->request, $this);

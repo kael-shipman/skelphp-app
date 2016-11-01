@@ -73,14 +73,15 @@ class Config implements Interfaces\AppConfig, Interfaces\DbConfig, Interfaces\Ui
 
   // AppConfig
   public function getContextRoot() { return $this->get('context-root'); }
+  public function getPublicRoot() { return $this->get('web-root'); }
   public function getExecutionProfile() { return $this->get('exec-profile'); }
 
   // DbConfig
   public function getDbDsn() { return 'sqlite:'.$this->get('db-file'); }
+  public function getDbContentRoot() { return $this->get('content-root'); }
 
   // UiManagerConfig
   public function getUiSrcRoot() { return $this->get('content-root'); }
-  public function getUiWebRoot() { return $this->get('web-root'); }
 }
 
 
