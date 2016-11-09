@@ -4,11 +4,6 @@ namespace Skel;
 /** Coordinates the various components that comprise an application */
 
 abstract class App implements Interfaces\AccessControlledApp {
-  //Execution Profiles
-  const PROFILE_PROD = 1;
-  const PROFILE_BETA = 2;
-  const PROFILE_TEST = 4;
-
   protected $localizer;
   protected $authorizer;
   protected $config;
@@ -40,7 +35,7 @@ abstract class App implements Interfaces\AccessControlledApp {
   public function getConfig() { return $this->config; }
 
   public function __construct(Interfaces\Config $config=null) {
-    $this->executionProfile = static::PROFILE_PROD;
+    $this->executionProfile = $config->getExecutionProfile();
     if ($config) $this->config = $config;
   }
 
