@@ -45,11 +45,12 @@ abstract class App implements Interfaces\App {
   public function getContextRoot() { return $this->config->getContextRoot(); }
 
   public function getError(int $code=404, string $header=null, string $text=null) {
-    $c = new Component(new StringTemplate('<h1>##errorHeader##</h1><p>##errorText##</p>', false));
     if (!$header) $header = $this->str('err-'.$code.'-header', 'Error!');
     if (!$text) $text = $this->str('err-'.$code.'-text', 'Sorry, there was an error processing your request.');
-    $c['errorHeader'] = $header;
-    $c['errorText'] = $text;
+    $c = new Component(
+      array('errorHeader' => $header, 'errorText' => $text),
+      new StringTemplate('<h1>##errorHeader##</h1><p>##errorText##</p>', false)
+    );
 
     $this->notifyListeners('Error', array($c, $code));
     return $c;
