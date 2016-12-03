@@ -3,184 +3,141 @@ namespace Skel;
 
 /** Coordinates the various components that comprise an application */
 
-abstract class App implements Interfaces\AccessControlledApp {
+// TODO: Document various event triggers
+abstract class App implements Interfaces\App {
   use ObservableTrait;
 
-  protected $localizer;
-  protected $authorizer;
   protected $config;
   protected $router;
   protected $db;
-  protected $request;
-  protected $uiManager;
-  protected $executionProfile;
   protected $_strings;
+  protected $request;
+  protected $executionProfile;
+
+  public function __construct(Interfaces\AppConfig $config, Interfaces\AppDb $db) {
+    $this->db = $db;
+    $this->config = $config;
+    $this->executionProfile = $config->getExecutionProfile();
+  }
+
+
 
   public function abort(Interfaces\Response $r) {
+    $this->notifyListeners('BeforeAbort');
     $r->prepareFromRequest($this->request);
     $r->send();
+    $this->notifyListeners('Abort');
     die();
   }
 
 
 
   public function clearRequest() {
+    $this->notifyListeners('BeforeClearRequest', array($this->request));
     $request = $this->request;
     $this->request = null;
-    $this->notifyListeners('ClearRequest', array('context' => $this, 'request' => $request));
+    $this->notifyListeners('ClearRequest', array($request));
     return $request;
   }
 
 
 
-  public function getConfig() { return $this->config; }
+  public function getContextRoot() { return $this->config->getContextRoot(); }
 
-  public function __construct(Interfaces\Config $config=null) {
-    $this->executionProfile = $config->getExecutionProfile();
-    if ($config) $this->config = $config;
-  }
+  public function getError(int $code=404, string $header=null, string $text=null) {
+    $c = new Component(new StringTemplate('<h1>##errorHeader##</h1><p>##errorText##</p>', false));
+    if (!$header) $header = $this->str('err-'.$code.'-header', 'Error!');
+    if (!$text) $text = $this->str('err-'.$code.'-text', 'Sorry, there was an error processing your request.');
+    $c['errorHeader'] = $header;
+    $c['errorText'] = $text;
 
-
-
-  //TODO: Remove
-  public function getCanonicalPath() {
-    if (!$this->request) throw new \RuntimeException('err-request-missing');
-    $uri = $this->request->getUri();
-
-    if ($this->localizer) return $this->localizer->getCanonicalPath($this->db, $uri);
-    else return $uri->getPath();
-  }
-
-  //TODO: Remove
-  public function getContent($key, array $content=array()) {
-    return implode("\n",$content);
-  }
-
-  public function getDb() { return $this->db; }
-
-  public function getErrorResponse(int $code=404, $str=null) {
-    $r = new Response('', $code);
-    if (!$str) $str = $this->str('err-404');
-    $str = array('content' => $str);
-
-    if ($code == 404) $r->setContent($this->getContent('404', $str));
-    else $r->setContent($this->getContent('generic-error', $str));
-    return $r;
+    $this->notifyListeners('Error', array($c, $code));
+    return $c;
   }
 
   public function getExecutionProfile() { return $this->executionProfile; }
 
-  public function getUiManager() { return $this->uiManager; }
-
-  public function getRedirectToHomeResponse($msg=null) {
-    //TODO: Do something with the message
-    //if ($msg) 
-    return new Response(null, 301, array('Location: '.$this->router->getPath('home')));
-  }
-
-  public function getRedirectToLoginResponse() {
-    return new Response(null, 301, array('Location: '.$this->router->getPath('login')));
-  }
-
   public function getResponse(Interfaces\Request $request=null) {
-    if (!$this->request) {
-      if (!$request) throw new InvalidArgumentException("No request was provided and no request has been set. You must either set a Request via `setRequest` or provide a request in the method call");
-      else $this->setRequest($request);
-    }
+    if ($request) $this->setRequest($request);
+    if (!$this->request) throw new InvalidArgumentException("No request was provided and no request has been set. You must either set a Request via `setRequest` or provide a request in the method call");
 
+    $this->notifyListeners('BeforeRouting', array($this->request));
     $response = null;
+    $component = null;
     try {
-      $response = $this->router->routeRequest($this->request, $this);
-      if (!$response) throw new Http404Exception();
-      elseif (is_string($response)) $response = new Response($response);
+      $component = $this->router->routeRequest($this->request, $this);
+      if (!$component) throw new Http404Exception();
+      elseif (!($component instanceof Interfaces\Component)) throw new InvalidControllerReturnException('The object returned by a controller method MUST be an instance of \Skel\Interfaces\Component or `false`');
     } catch (Http404Exception $e) {
-      $this->notifyListeners('Http404Exception', array('app' => $this));
-      $response = $this->getErrorResponse(404);
+      $component = $this->getError(404);
+      // Don't have to notify listeners here because getError notifies on Error
     } catch (UnauthenticatedUserException $e) {
       // User isn't yet authenticated. Redirect to login
-      $this->notifyListeners('UnauthenticatedUserException', array('app' => $this));
-      $response = $this->getRedirectToLoginResponse();
+      // TODO: figure out how to send a message to the user
+      $this->notifyListeners('UnauthenticatedUserException');
+      $this->redirect('/');
     } catch (UnauthorizedActionException $e) {
       // User isn't allowed to use this functionality
-      $this->notifyListeners('UnauthorizedActionException', array('app' => $this));
-      $response = $this->getRedirectToHomeResponse($this->str('err-access-denied'));
+      // TODO: figure out how to send a message to the user
+      $this->notifyListeners('UnauthorizedActionException');
+      $this->redirect('/');
     }
-    if (!$response) $this->getErrorResponse(500, $this->str('err-misc-system-error'));
 
-    // If nothing else, return an error
+    $this->notifyListeners('ComponentCreated', array($component));
+    $response = $this->createResponseFromComponent($component);
+
     $response->prepareFromRequest($this->request);
-    $this->notifyListeners('ResponseCreated', array('app' => $this, 'response' => $response));
+    $this->notifyListeners('ResponseCreated', array($response));
     return $response;
   }
 
+  public function getPublicRoot() { return $this->config->getPublicRoot(); }
+
+  public function getRequest() { return $this->request; }
+
   public function getRouter() { return $this->router; }
 
-
-
-  public function requestIsAuthorized($action) {
-    if ($this->authorizer === null) return true;
-    else return $this->authorizer->requestIsAuthorized($this->request, $action);
-  }
-
-  public function requireAuthorization($action) {
-    if (!$this->requestIsAuthorized($action)) throw new UnauthorizedFunctionAccessException($this->str('err-access-denied'));
+  public function getTemplate(string $name) {
+    return $this->db->getTemplate($name);
   }
 
 
 
-  public function setAuthorizer(Interfaces\Authorizer $authorizer) {
-    $this->authorizer = $authorizer;
-    $this->notifyListeners('SetAuthorizer', array('context' => $this, 'authorizer' => $authorizer));
-    return $this;
+
+  public function redirect($url, $code=303) {
+    switch($code) {
+    case 301: $description = 'Moved Permanently'; break;
+    case 302: $code = 303;
+    case 303: $description = 'See Other'; break;
+    case 307: $description = 'Temporary Redirect'; break;
+    case 308: $description = 'Permanent Redirect'; break;
+    default: throw new \RuntimeException("Unknown HTTP Status code `$code` for redirect");
+    }
+
+    $this->notifyListeners('Redirect', array($url, $code));
+    header("HTTP/1.1 $code $description");
+    header("Location: $url");
+    die();
   }
 
-  public function setConfig(Interfaces\Config $config) {
-    $this->config = $config;
-    $this->notifyListeners('SetConfig', array('context' => $this, 'config' => $config));
-    return $this;
-  }
 
-  /** Set DB */
-  public function setDb(Interfaces\DB $db) {
-    $this->db = $db;
-    $this->notifyListeners('SetDb', array('context' => $this, 'db' => $db));
-    return $this;
-  }
 
-  public function setExecutionProfile(int $profile) {
-    $this->executionProfile = $profile;
-    $this->notifyListeners('SetExecutionProfile', array('context' => $this, 'executionProfile' => $profile));
-    return $this;
-  }
-
-  public function setUiManager(\Skel\Interfaces\UiManager $im) {
-    $this->uiManager = $im;
-    $this->notifyListeners('SetUiManager', array('context' => $this, 'uiManager' => $im));
-    return $this;
-  }
-
-  /** Sets the localizer for this app */
-  public function setLocalizer(Interfaces\Localizer $localizer) {
-    $this->localizer = $localizer;
-    $this->notifyListeners('SetLocalizer', array('context' => $this, 'localizer' => $localizer));
-    return $this;
-  }
 
   /** Associate a request object with this application */
   public function setRequest(Interfaces\Request $request) {
     $this->request = $request;
-    $this->notifyListeners('SetRequest', array('context' => $this, 'request' => $request));
+    $this->notifyListeners('SetRequest', array($request));
     return $this;
   }
 
   public function setRouter(Interfaces\Router $router) {
     $this->router = $router;
-    $this->notifyListeners('SetRouter', array('context' => $this, 'router' => $router));
+    $this->notifyListeners('SetRouter', array($router));
     return $this;
   }
 
   /**
-   * Get string by key
+   * Get string by key with optional default value
    *
    * @return string
    * @param string $key - the (arbitrary) key by which the string was stored
@@ -190,13 +147,60 @@ abstract class App implements Interfaces\AccessControlledApp {
       $default_strings = array(
         'err-access-denied' => '<h1>Sorry, you can\'t do that</h1><p>You\'ve tried to access a part of the system that requires more privileges than you have.</p>',
         'err-request-missing' => '<h1>System Error</h1><p>You must associate a request with this app instance before using this function</p>',
-        'err-404' => '<h1>404</h1><p>Sorry, we can\'t find the page you\'re looking for :(</p>',
-        'err-misc-system-error' => '<h1>Error!</h1><p>Sorry, something went wrong, and we\'re not sure what :(</p>',
+        'err-404-header' => '404 - Not Found',
+        'err-404-text' => 'Sorry, we can\'t find the page you\'re looking for :(',
+        'err-500-header' => 'Error!',
+        'err-500-text' => 'Sorry, something went wrong, and we\'re not sure what :(',
       );
       $this->_strings = array_merge($default_strings, $this->db->getStrings());
     }
 
     return $this->_strings[$key] ?: $default;
+  }
+
+
+  public function debugComponent(\Skel\Interfaces\Context $context, \Skel\Interfaces\Component $component) {
+    $r = function(\Skel\Interfaces\Component $comp, $space="\t") use (&$r) {
+      $headingSpace = substr($space,1);
+      echo "\n{$headingSpace}Component----------------------------------------";
+      $t = str_replace("\n",'\n', (string)$comp->getTemplate());
+      if (strlen($t) > 100) $t = substr($t, 0, 50).'...'.substr($t, -50);
+      echo "\n{$headingSpace}Template: $t\n";
+
+      foreach($comp as $e => $c) {
+        if ($c instanceof \Skel\Interfaces\Component){
+          echo "\n$space$e:";
+          $r($c, $space."\t");
+        }elseif (!is_numeric($c) && !is_array($c) && !is_string($c) && !is_bool($c)) echo "\n$space$e:\n$space(Object)";
+        else echo "\n$space$e:\n$space$c";
+        echo "\n$space.........................\n";
+      }
+    };
+    echo "Site: ";
+    $r($component);
+  }
+
+
+
+
+
+
+
+
+
+
+
+  // Protected functions
+
+  protected function createResponseFromComponent(Interfaces\Component $component) { 
+    if ($this->getResponseType() == 'json') return new JsonResponse($component);
+    else return new Response($component->render());
+  }
+
+  protected function getResponseType() {
+    $accept = $this->request->headers->get('Accept');
+    if (strpos($accept, 'json') !== false) return 'json';
+    else return 'html';
   }
 }
 
