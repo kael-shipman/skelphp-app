@@ -12,16 +12,6 @@
       "role" : "Developer"
     }
   ],
-  "repositories" : [
-    {
-      "type" : "vcs",
-      "url" : "https://github.com/kael-shipman/skelphp-header"
-    },
-    {
-      "type" : "vcs",
-      "url" : "https://github.com/kael-shipman/skelphp-traits"
-    }
-  ],
   "require" : {
     "php" : ">=5.4",
     "skel/header" : "~0.0",
