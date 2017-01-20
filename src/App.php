@@ -4,7 +4,7 @@ namespace Skel;
 /** Coordinates the various components that comprise an application */
 
 // TODO: Document various event triggers
-abstract class App implements Interfaces\App {
+class App implements Interfaces\App {
   use ObservableTrait;
 
   protected $config;
