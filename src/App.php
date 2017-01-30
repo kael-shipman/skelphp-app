@@ -14,20 +14,13 @@ class App implements Interfaces\App {
   protected $request;
   protected $executionProfile;
 
-  public function __construct(Interfaces\AppConfig $config, Interfaces\AppDb $db) {
-    $this->db = $db;
+  public function __construct(Interfaces\AppConfig $config, Interfaces\AppDb $db, Interfaces\Router $router) {
     $this->config = $config;
     $this->executionProfile = $config->getExecutionProfile();
-  }
-
-
-
-  public function abort(Interfaces\Response $r) {
-    $this->notifyListeners('BeforeAbort');
-    $r->prepareFromRequest($this->request);
-    $r->send();
-    $this->notifyListeners('Abort');
-    die();
+    $this->db = $db;
+    $this->notifyListeners('SetDatabase', array($db));
+    $this->router = $router;
+    $this->notifyListeners('SetRouter', array($router));
   }
 
 
@@ -41,8 +34,6 @@ class App implements Interfaces\App {
   }
 
 
-
-  public function getContextRoot() { return $this->config->getContextRoot(); }
 
   public function getError(int $code=404, string $header=null, string $text=null) {
     if (!$header) $header = $this->str('err-'.$code.'-header', 'Error!');
@@ -99,13 +90,18 @@ class App implements Interfaces\App {
   public function getRouter() { return $this->router; }
 
   public function getTemplate(string $name) {
-    return $this->db->getTemplate($name);
+    $path = $this->config->getTemplateDir()."/$name";
+    $type = substr($path, strrpos($path, '.')+1);
+    if ($type == 'html') $t = new \Skel\StringTemplate($path);
+    elseif ($type == 'php') $t = new \Skel\PowerTemplate($path);
+    else throw new \InvalidArgumentException("Template `$name` not found at `$path`!");
+    return $t;
   }
 
 
 
 
-  public function redirect($url, $code=303) {
+  public function redirect(string $url, $code=303) {
     switch($code) {
     case 301: $description = 'Moved Permanently'; break;
     case 302: $code = 303;
@@ -128,12 +124,6 @@ class App implements Interfaces\App {
   public function setRequest(Interfaces\Request $request) {
     $this->request = $request;
     $this->notifyListeners('SetRequest', array($request));
-    return $this;
-  }
-
-  public function setRouter(Interfaces\Router $router) {
-    $this->router = $router;
-    $this->notifyListeners('SetRouter', array($router));
     return $this;
   }
 
