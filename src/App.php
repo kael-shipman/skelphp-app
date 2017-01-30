@@ -101,7 +101,7 @@ class App implements Interfaces\App {
 
 
 
-  public function redirect(string $url, $code=303) {
+  public function redirect(string $url, int $code=303) {
     switch($code) {
     case 301: $description = 'Moved Permanently'; break;
     case 302: $code = 303;
