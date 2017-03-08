@@ -12,14 +12,20 @@ class App implements Interfaces\App {
   protected $db;
   protected $_strings;
   protected $request;
-  protected $executionProfile;
 
-  public function __construct(Interfaces\AppConfig $config, Interfaces\AppDb $db, Interfaces\Router $router) {
-    $this->config = $config;
-    $this->executionProfile = $config->getExecutionProfile();
-    $this->db = $db;
+  public function __construct(Interfaces\Factory $factory) {
+    if (
+      !($factory instanceof Interfaces\DbFactory) ||
+      !($factory instanceof Interfaces\RouterFactory)) {
+
+      throw new \InvalidArgumentException("You must pass an instance of your own custom Factory class into `App::constructor` that implements the interfaces for DbFactory, and RouterFactory. If you're not sure how to do this, just go look at the various `*Factory` interfaces defined in the `skel/header` package and create a class that implements those methods."); 
+    }
+    if (!($factory->getConfig() instanceof Interfaces\AppConfig)) throw new \InvalidArgumentException("The config object you create must be an instance of `\Skel\Interfaces\AppConfig`. Please add that implementation to the `Config` object you create in your Factory.");
+
+    $this->config = $factory->getConfig();
+    $this->db = $factory->getDb();
     $this->notifyListeners('SetDatabase', array($db));
-    $this->router = $router;
+    $this->router = $factory->getRouter();
     $this->notifyListeners('SetRouter', array($router));
   }
 
@@ -47,7 +53,7 @@ class App implements Interfaces\App {
     return $c;
   }
 
-  public function getExecutionProfile() { return $this->executionProfile; }
+  public function getExecutionProfile() { return $this->config->getExecutionProfile(); }
 
   public function getResponse(Interfaces\Request $request=null) {
     if ($request) $this->setRequest($request);
