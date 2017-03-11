@@ -10,13 +10,16 @@ class App implements Interfaces\App {
   protected $config;
   protected $router;
   protected $db;
+  protected $factory;
   protected $_strings;
   protected $request;
   protected $executionProfile;
 
-  public function __construct(Interfaces\AppConfig $config, Interfaces\AppDb $db, Interfaces\Router $router) {
+  public function __construct(Interfaces\AppConfig $config, Interfaces\AppDb $db, Interfaces\Router $router, Interfaces\Factory $factory) {
     $this->config = $config;
     $this->executionProfile = $config->getExecutionProfile();
+    $this->factory = $factory;
+    $this->notifyListeners('SetFactory', array($db));
     $this->db = $db;
     $this->notifyListeners('SetDatabase', array($db));
     $this->router = $router;
@@ -38,12 +41,13 @@ class App implements Interfaces\App {
   public function getError(int $code=404, string $header=null, string $text=null) {
     if (!$header) $header = $this->str('err-'.$code.'-header', 'Error!');
     if (!$text) $text = $this->str('err-'.$code.'-text', 'Sorry, there was an error processing your request.');
-    $c = new Component(
+
+    $c = $this->factory->new('component', 'generic', 
       array('errorHeader' => $header, 'errorText' => $text),
-      new StringTemplate('<h1>##errorHeader##</h1><p>##errorText##</p>', false)
+      $this->factory->new('template', 'string', '<h1>@@errorHeader@@</h1><p>@@errorText@@</p>', false)
     );
 
-    $this->notifyListeners('Error', array($c, $code));
+    $this->notifyListeners('Error', array(&$c, $code));
     return $c;
   }
 
@@ -51,7 +55,7 @@ class App implements Interfaces\App {
 
   public function getResponse(Interfaces\Request $request=null) {
     if ($request) $this->setRequest($request);
-    if (!$this->request) throw new InvalidArgumentException("No request was provided and no request has been set. You must either set a Request via `setRequest` or provide a request in the method call");
+    if (!$this->request) throw new \InvalidArgumentException("No request was provided and no request has been set. You must either set a Request via `setRequest` or provide a request in the method call");
 
     $this->notifyListeners('BeforeRouting', array($this->request));
     $response = null;
@@ -89,13 +93,16 @@ class App implements Interfaces\App {
 
   public function getRouter() { return $this->router; }
 
+  public function getFactory() { return $this->factory; }
+
   public function getTemplate(string $name) {
     $path = $this->config->getTemplateDir()."/$name";
     $type = substr($path, strrpos($path, '.')+1);
-    if ($type == 'html') $t = new \Skel\StringTemplate($path);
-    elseif ($type == 'php') $t = new \Skel\PowerTemplate($path);
-    else throw new \InvalidArgumentException("Template `$name` not found at `$path`!");
-    return $t;
+    return $this->factory->new('template', $type, $path);
+  }
+
+  public function getUrlFor(string $key) {
+    return $key;
   }
 
 
@@ -184,8 +191,13 @@ class App implements Interfaces\App {
   // Protected functions
 
   protected function createResponseFromComponent(Interfaces\Component $component) { 
-    if ($this->getResponseType() == 'json') return new JsonResponse($component);
-    else return new Response($component->render());
+    if ($this->getResponseType() == 'json') $c = $component;
+    else $c = $component->render();
+
+    $r = $this->factory->new('response', $this->getResponseType(), $c);
+
+    if ($component['status']) $r->setStatusCode($component['status']);
+    return $r;
   }
 
   protected function getResponseType() {
