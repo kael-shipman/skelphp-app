@@ -43,7 +43,7 @@ class App implements Interfaces\App {
     if (!$text) $text = $this->str('err-'.$code.'-text', 'Sorry, there was an error processing your request.');
 
     $c = $this->factory->new('component', 'generic', 
-      array('errorHeader' => $header, 'errorText' => $text),
+      array('errorHeader' => $header, 'errorText' => $text, 'status' => $code),
       $this->factory->new('template', 'string', '<h1>@@errorHeader@@</h1><p>@@errorText@@</p>', false)
     );
 
