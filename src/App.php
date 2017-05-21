@@ -79,7 +79,7 @@ class App implements Interfaces\App {
       $this->redirect('/');
     }
 
-    $this->notifyListeners('ComponentCreated', array($component));
+    $this->notifyListeners('ComponentCreated', array(&$component));
     $response = $this->createResponseFromComponent($component);
 
     $response->prepareFromRequest($this->request);
